@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <link rel="stylesheet" href="css/index.css">
+    <title>Picture Preview</title>
+
+</head>
+
+<body>
+    <script src="cordova.js"></script>
+    <!-- <script src="js/common.js"></script> -->
+
+    <img id="PrevImg" class="u4aCdvCameraCapImg"></img>
+
+    <div id="u4aCdvCamera_wrap">
+        <div class="u4aCdvCamera_btm">
+            <div class="u4aCdvCamera_check u4aCdvCamera_bt">
+                <button type="button" class="u4aCdvCamera_checkBt" onclick="oAPP.onCameraCaptureSave();">
+                    <img src="svg/check.svg" alt="button">
+                </button>
+            </div>
+            <div class="u4aCdvCamera_close u4aCdvCamera_bt">
+                <button type="button" class="u4aCdvCamera_closeBt" onclick="oAPP.onCameraCaptureCancel();">
+                    <img src="svg/Union (1).svg" alt="button">
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        var oAPP = (function () {
+            "use strict";
+
+            /************************************************************************
+             * Global Variables
+             * **********************************************************************/
+
+            var oAPP = {};
+
+            oAPP.CameraPicImgSrc;
+
+            const
+                REMOTE = require('electron').remote,
+                IPCRENDERER = require('electron').ipcRenderer,
+                CURRWIN = REMOTE.getCurrentWindow();
+
+            /************************************************************************
+             * 캡쳐된 이미지를 저장한다.
+             * **********************************************************************/
+            oAPP.onCameraCaptureSave = function () {
+
+                var oSendParam = {
+                    IMG_BASE64: oAPP.CameraPicImgSrc
+                };
+
+                IPCRENDERER.send("if-camera-result", oSendParam);
+
+            }; // end of oAPP.onCameraCaptureSave
+
+            /************************************************************************
+             * 이미지 캡쳐 취소
+             * **********************************************************************/
+            oAPP.onCameraCaptureCancel = function () {
+
+                CURRWIN.close();
+
+            }; // end of oAPP.onCameraCaptureCancel
+
+            /************************************************************************
+             * image Capture 한 base64를 전달받는다.
+             * **********************************************************************/
+            oAPP.onIpcRenderer_if_camera_pic_img = function (event, res) {
+
+                oAPP.CameraPicImgSrc = res;
+
+                var oImg = document.getElementById("PrevImg");
+                if (!oImg) {
+                    return;
+                }
+
+                oImg.src = res;
+
+            }; // end of oAPP.onIpcRenderer_if_camera_pic_img
+
+            // image Capture 한 base64를 전달받는다.
+            IPCRENDERER.on("if-camera-pic-img", oAPP.onIpcRenderer_if_camera_pic_img);
+
+            return oAPP;
+            
+        })();
+    </script>
+</body>
+
+</html>

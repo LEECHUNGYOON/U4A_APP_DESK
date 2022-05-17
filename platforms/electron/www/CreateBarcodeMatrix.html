@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+
+<html>
+    <head>
+        <meta charset="utf-8">       
+        <title>Barcode Create....</title>
+        <script src="cordova.js"></script>        
+        <script src="js/html2canvas.js"></script>
+        <script src="js/jspdf.js"></script>
+
+<style>
+
+html, body {
+    margin:0px;
+    height: 100%;
+    width: 100%;
+}
+body{
+    overflow-x: hidden;
+    overflow-y: hidden;
+}
+
+* {
+    -webkit-box-sizing: border-box;
+    -moz-box-sizing: border-box;
+    box-sizing: border-box;
+}
+.u4aProgArea {
+    width: 80%;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%);
+  -moz-transform: translate(-50%);
+  -webkit-transform: translate(-50%);
+  -ms-transform: translate(-50%);
+  display: inline-block;
+
+}
+.progress {
+    margin: 10px;
+    width: 100%;
+}
+.progress {
+    height: 20px;
+    margin-bottom: 20px;
+    overflow: hidden;
+    background-color: #f5f5f5;
+    border-radius: 4px;
+    -webkit-box-shadow: inset 0 1px 2px rgb(0 0 0 / 10%);
+    box-shadow: inset 0 1px 2px rgb(0 0 0 / 10%);
+}
+.progress-bar.active, .progress.active .progress-bar {
+    -webkit-animation: progress-bar-stripes 2s linear infinite;
+    -o-animation: progress-bar-stripes 2s linear infinite;
+    animation: progress-bar-stripes 2s linear infinite;
+}
+.progress-bar-success {
+    background-color: #5cb85c;
+}
+.progress-bar-striped, .progress-striped .progress-bar {
+    background-image: -webkit-linear-gradient(
+45deg
+,rgba(255,255,255,.15) 25%,transparent 25%,transparent 50%,rgba(255,255,255,.15) 50%,rgba(255,255,255,.15) 75%,transparent 75%,transparent);
+    background-image: -o-linear-gradient(45deg,rgba(255,255,255,.15) 25%,transparent 25%,transparent 50%,rgba(255,255,255,.15) 50%,rgba(255,255,255,.15) 75%,transparent 75%,transparent);
+    background-image: linear-gradient(
+45deg
+,rgba(255,255,255,.15) 25%,transparent 25%,transparent 50%,rgba(255,255,255,.15) 50%,rgba(255,255,255,.15) 75%,transparent 75%,transparent);
+    -webkit-background-size: 40px 40px;
+    background-size: 40px 40px;
+}
+.progress-bar {
+    float: left;
+    width: 0;
+    height: 100%;
+    font-size: 12px;
+    line-height: 20px;
+    color: #fff;
+    text-align: center;
+    background-color: #337ab7;
+    -webkit-box-shadow: inset 0 -1px 0 rgb(0 0 0 / 15%);
+    box-shadow: inset 0 -1px 0 rgb(0 0 0 / 15%);
+    -webkit-transition: width .6s ease;
+    -o-transition: width .6s ease;
+    transition: width .6s ease;
+}
+</style>      
+
+<script>
+
+
+// 데이터 길이
+var iDataLength = 0,
+    aPdfs = [],
+    aQrData = [],
+    aErrorData = [],
+    iQrDataLen = 0;
+    
+var oApp = {
+
+    sFolderpath : "",
+ 
+
+    onStart : function(){
+ 
+        //nodejs API 초기 자원 할당
+        oApp.remote = require('electron').remote;
+        oApp.ipcRenderer = require('electron').ipcRenderer;
+        oApp.fs = oApp.remote.require('fs');                                
+        oApp.bwipjs = require('bwip-js');
+
+        oApp.ipcRenderer.on('if_barcodeMTXdata', (event, res) => {
+   
+                    aQrData = res.sendData.DATA;        
+                    
+                    oApp.sFolderpath = res.sendData.PATH;
+
+                    iQrDataLen = aQrData.length; // 전체 데이터 갯수
+
+                    // progress
+                    oApp.setProgress("QR 생성완료..", iQrDataLen, iDataLength);    
+
+                    // Qr 생성          
+                    oApp.fn_createQr();     
+    
+           
+        });  
+    },
+
+    setProgress : function(text, tot, cnt){
+
+        var per = (cnt / tot) * 100;
+
+        var oProg = document.getElementById("dynamic"),
+            oProgTxt = document.getElementById("current-progress");
+
+        per = Math.round(per);
+
+        oProg.style.width = per + "%";
+        oProgTxt.innerHTML = per + "%";
+
+    },
+    hex_to_ascii: function (str1){
+        var hex  = str1.toString();
+        var str = '';
+        for (var n = 0; n < hex.length; n += 2) {
+            str += String.fromCharCode(parseInt(hex.substr(n, 2), 16));
+        }
+        return str;
+    }
+
+};
+// 구조
+// RFKY TYPE STRING, 
+// HTMS TYPE STRING,    "본문
+// BSRC TYPE STRING,    "바코드 생성되야될 코드(TEXT)
+// BWID TYPE I,         "바코드 WIDTH
+// BHEI TYPE I,         "바코드 HEIGHT
+// MEIN TYPE STRING,    "PDF 단위(mm, px 등)
+// PWID TYPE I,         "PDF WIDTH
+// PHEI TYPE I,         "PDF HEIGHT
+// PRDT TYPE C LENGTH 1,  "PDF 출력 방향(l:가로, p:세로)
+// FNAM TYPE STRING,    "PDF 저장 파일명
+// DPTH TYPE STRING,    "PDF 다운로드 PATH
+
+var GGG = 0;
+
+oApp.fn_createQr = function (){
+
+    console.log(aQrData);
+   
+    var oQrData = aQrData[iDataLength];
+
+    iDataLength++;
+
+    if(typeof oQrData === "undefined"){
+        // // progress
+        //console.log("Barcode 생성 끝!!");
+
+        oApp.fn_finish();
+
+        return;
+    }
+
+    // 파일명 체크
+    // 파일명 체크할 정규식
+     var pattern = /[\{\}\/?,;:|*~`!^\+<>@\#$%&\\\=\'\"]/gi;
+
+    if(pattern.test(oQrData.FNAM)){
+
+        // 에러 데이터 수집
+        aErrorData.push({
+            RFKY : oQrData.RFKY,
+            RTCD : "E",
+            RMSG : "Special characters cannot be entered in the file name." //"파일에 특수 문자가 포함되지 않아야 합니다"
+        });
+
+        // 생성 재귀 호출 
+        oApp.fn_createQr();
+        return;
+
+    }    
+
+
+    //매트릭스 바코드 생성 
+    oApp.bwipjs.toBuffer({
+        bcid:        'datamatrix',       // Barcode type
+        text:        oApp.hex_to_ascii(oQrData.BSRC),    	 // Text to encode
+        scale:       1,               	// 3x scaling factor
+        height:      oQrData.BHEI,   	// Bar height, in millimeters
+        width: 		 oQrData.BWID,		// Bar width, in millimeters	
+    }, function (err, png) { 
+
+        if(err){
+            oQrData.RTCD = "E";
+            oQrData.RMSG = err.toString();
+
+            // 에러 데이터 수집
+            aErrorData.push({
+                RFKY : oQrData.RFKY,
+                RTCD : oQrData.RTCD,
+                RMSG : oQrData.RMSG
+            });
+
+            // 생성 재귀 호출 
+            oApp.fn_createQr();
+            return;
+        }
+
+        var oDiv = document.getElementById("_HtmlPDF");
+        if(!oDiv){
+            oDiv = document.createElement("div");
+            oDiv.id = "_HtmlPDF";
+            document.body.appendChild(oDiv);
+            oDiv = null;
+            oDiv = document.getElementById("_HtmlPDF");
+        }
+
+        var sRepChar = "<%=BARCODEIMG%>", // QR 이미지 태그 Replace 할 영역 구분자,
+            oRepCharRegex = new RegExp(sRepChar, "gi"), // replace 할 정규식     
+            sImgtag = '<img style="width:38mm;height: 38mm;" src="' + "data:image/png;base64," + png.toString("base64") + '"/>';   
+
+            sHtml = oQrData.HTMS,   // html 본문            
+            sHtml = sHtml.replace(oRepCharRegex, sImgtag);
+        
+            oDiv.innerHTML = sHtml;
+
+        html2canvas(oDiv).then(function(canvas) {
+            
+            var oPdf = new jspdf.jsPDF(oQrData.PRDT, oQrData.MEIN, [oQrData.PWID, oQrData.PHEI]);
+            
+            var oImgData = canvas.toDataURL('image/png');
+                oPdf.addImage(oImgData, 'PNG', 0, 0, oQrData.PWID, oQrData.PHEI, '', 'FAST'); 
+                
+            // var oFileInfo = {                
+            //     RFKY : oQrData.RFKY,    // Ref Key
+            //     // MEIN: oQrData.MEIN,     // PDF 단위
+            //     // PWID: oQrData.PWID,     // PDF WIDTH
+            //     // PHEI: oQrData.PHEI,     // PDF HEIGHT
+            //     // PRDT: oQrData.PRDT,     // PDF 출력 방향(l:가로, p:세로)
+            //     FNAM: oQrData.FNAM,     // PDF 저장 파일명
+            //     DPTH: oQrData.DPTH,     // PDF 파일 다운로드 경로                
+            //     BIN  : oPdf.output(),   // PDF Binary
+            // };
+            
+            
+            var sFilePath = oApp.sFolderpath + "//" + oQrData.FNAM + ".pdf";
+
+            console.log('filename : ' + sFilePath);
+
+            oApp.fs.writeFileSync(sFilePath, oPdf.output(), 'binary');
+
+            // progress
+            oApp.setProgress("QR 생성완료..", iQrDataLen, iDataLength);
+
+            // 생성 재귀 호출 
+            oApp.fn_createQr();
+
+        });
+
+        // var oPdfInfo = { 
+        //     content: sHtml,         // PDF 출력 HTML
+        //     RFKY : oQrData.RFKY,    // Ref Key
+        //     MEIN: oQrData.MEIN,     // PDF 단위
+        //     PWID: oQrData.PWID,     // PDF WIDTH
+        //     PHEI: oQrData.PHEI,     // PDF HEIGHT
+        //     PRDT: oQrData.PRDT,     // PDF 출력 방향(l:가로, p:세로)
+        //     FNAM: oQrData.FNAM,     // PDF 저장 파일명
+        //     DPTH: oQrData.DPTH,     // PDF 파일 다운로드 경로
+        // };
+
+        // aPdfs.push(oPdfInfo);
+        
+        // oPdfInfo = {};
+
+        // 생성 재귀 호출 
+        //oApp.fn_createQr();
+
+    });	
+
+}; // end of oApp.fn_createQr
+
+oApp.fn_finish = function(){
+
+    console.log("PDF 파일 다운 완료!!");
+
+    oApp.ipcRenderer.send("if-barcodeMTXdataCB", aErrorData);
+
+    // 에러 호출
+    setTimeout(function(){
+        oApp.remote.getCurrentWindow().close();    
+    }, 500);
+
+};
+
+
+oApp.onStart();
+
+        </script>
+        
+    </head>
+    <body>   
+        <div class="u4aProgArea">
+            <div class="progress">
+                <div id="dynamic" class="progress-bar progress-bar-success progress-bar-striped active" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" style="width: 0%">
+                <span id="current-progress"></span>
+                </div>
+            </div>     
+        </div>
+
+        <br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br> 
+        <div id="_HtmlPDF"></div>
+       
+
+    </body>
+</html>

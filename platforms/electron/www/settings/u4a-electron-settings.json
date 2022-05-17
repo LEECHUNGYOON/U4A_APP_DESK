@@ -1,0 +1,26 @@
+{
+    "browserWindow": {
+        "height": 800,
+        "width": 800,
+        "darkTheme": true,
+        "resizable": true,
+        "movable": true,
+        "closable": true,
+        "modal": false,
+        "autoHideMenuBar": true,
+        "webPreferences": {
+            "devTools": true,
+            "nodeIntegration": true,
+            "enableRemoteModule":true,
+            "contextIsolation": false,
+            "nativeWindowOpen": true,
+            "webSecurity": false,
+            "partition": "UI5FORABAP"
+        }
+    },
+    "autoplayPolicy": "no-user-gesture-required",
+    "browserWindowInstance": {
+
+    },
+    "isDev": true
+}

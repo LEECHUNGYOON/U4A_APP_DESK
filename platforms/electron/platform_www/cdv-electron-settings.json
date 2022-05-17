@@ -1,0 +1,18 @@
+{
+    "browserWindow": {
+        "height": 800,
+        "width": 800,
+        "webPreferences":{
+            "devTools": true,
+            "nodeIntegration": true,
+            "enableRemoteModule":true,
+            "contextIsolation": false,
+		 "nativeWindowOpen": true,
+		 "webSecurity": false
+        }
+       
+    },
+    "browserWindowInstance": {
+
+     }
+}

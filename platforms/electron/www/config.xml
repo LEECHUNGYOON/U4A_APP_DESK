@@ -1,0 +1,21 @@
+<?xml version='1.0' encoding='utf-8'?>
+<widget id="com.U4A_APP_ELECTRON.app" version="1.0.0" xmlns="http://www.w3.org/ns/widgets" xmlns:cdv="http://cordova.apache.org/ns/1.0">
+    <name>U4A_APP_ELECTRON</name>
+    <description>
+        A U4A IDE Platform RnD Team application that responds to the deviceready event.
+    </description>
+    <author email="u4aide@u4ainfo.com" href="https://www.u4ainfo.com">
+        U4A IDE Platform RnD Team 
+    </author>
+    <content src="index.html" />
+    <access origin="*" />
+    <allow-intent href="http://*/*" />
+    <allow-intent href="https://*/*" />
+    <allow-intent href="tel:*" />
+    <allow-intent href="sms:*" />
+    <allow-intent href="mailto:*" />
+    <allow-intent href="geo:*" />
+    <icon src="www/img/logo.png" target="installer" />
+    <preference name="AppendUserAgent" value="u4a_cordova_electron" />
+    <preference name="ElectronSettingsFilePath" value="www/settings/u4a-electron-settings.json" />
+</widget>

@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <link rel="stylesheet" href="css/index.css">
+    <title>QR Scanner</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0px;
+        }
+
+        .u4aCdvQrReadArea {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .u4aCdvCamera_wrap {
+            position: fixed;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="u4aCdvQrReadArea">
+        <div style="width: 100%;" id="reader"></div>
+    </div>
+
+    <div class="u4aCdvCameraSelect_wrap">
+        <select id="cameraSelect" name="camera_list" class="u4aCdvCamera_selOri u4aCdvDisplayHidden"
+            onchange="oAPP.onQrScanStart();">
+        </select>
+    </div>
+
+    <!-- u4aCdvDisplayHidden -->
+    <div id="u4aCdvCamera_wrap" class="u4aCdvCamera_wrap">
+        <div class="u4aCdvCamera_btm">
+            <div class="u4aCdvCamera_close u4aCdvCamera_bt">
+                <button type="button" class="u4aCdvCamera_closeBt" onclick="oAPP.onQrScanWinCloseBtn();">
+                    <img src="svg/Union (1).svg" alt="button">
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Page Loading Start -->
+    <div id="u4a_main_load" class="u4a_loaders">
+        <span class="u4a_loader u4a_loader-bars"> <span></span> </span> Loading...
+    </div>
+    <!-- Page Loading End -->
+
+    <script src="cordova.js"></script>
+    <!-- <script src="js/common.js"></script> -->
+
+    <script>
+        var globalThis;
+    </script>
+
+    <script src="js/html5-qrcode.min.js"></script>
+    <script>
+        var oAPP = (function () {
+            "use strict";
+
+            /************************************************************************
+             * Global Variables
+             * **********************************************************************/
+            var oAPP = {};
+            oAPP.QrScanOpt = {};
+
+            const
+                REMOTE = require('electron').remote,
+                APP = REMOTE.app,
+                IPCRENDERER = require('electron').ipcRenderer,
+                CURRWIN = REMOTE.getCurrentWindow(),
+                PATH = require('path'),
+                COMMON = require(PATH.join(__dirname, "\\js\\common.js"));                
+
+            var html5QrCode,
+                aCAMERA = [];
+
+            oAPP.onStart = function () {
+
+                navigator.getUserMedia = navigator.getUserMedia ||
+                    navigator.webkitGetUserMedia ||
+                    navigator.mozGetUserMedia;
+
+                if (!navigator.getUserMedia) {
+
+                    IPCRENDERER.send("if-qr-scan-error", {
+                        "ERRCOD": "0016"
+                    }); // "미디어를 지원하지 않습니다."
+
+                    CURRWIN.close();
+
+                    return;
+                }
+
+                // Qr Barcode Option 정보 적용
+                var sFormat = oAPP.QrScanOpt["formats"],
+                    aFormat = [],
+                    aFormatOptions = [];
+
+                if (sFormat) {
+                    aFormat = sFormat.split(",");
+                }
+
+                var iFormatLen = aFormat.length;
+                if (iFormatLen > 0) {
+                    for (var i = 0; i < iFormatLen; i++) {
+                        aFormatOptions.push(Html5QrcodeSupportedFormats[aFormat[i]]);
+                    }
+                }
+
+                var iFormatOptionLength = aFormatOptions.length;
+                if (iFormatOptionLength == 0) {
+
+                    html5QrCode = new Html5Qrcode("reader");
+                } else {
+
+                    html5QrCode = new Html5Qrcode("reader", {
+                        formatsToSupport: aFormatOptions
+                    });
+                }
+
+                // 비디오 정보를 구하고, 카메라를 실행
+                navigator.mediaDevices.enumerateDevices()
+                    .then(oAPP.getQrCameraDevicesInfo)
+                    .then(oAPP.onQrScanStart)
+                    .catch(oAPP.onQrCameraErrorHandle);
+
+            }; // end of oAPP.onStart            
+
+            /************************************************************************
+             * 현재 디바이스에 카메라 정보를 구한다.
+             * **********************************************************************/
+            oAPP.getQrCameraDevicesInfo = function (aDeviceInfos) {
+
+                // Media Device 정보가 담긴 Object의 데이터 타입 체크
+                if (aDeviceInfos instanceof Array == false) {
+                    return;
+                }
+
+                // Media 정보 중, 카메라 디바이스가 없을 경우 실행하지 않는다.
+                var found = aDeviceInfos.find(element => element.kind === "videoinput");
+                if (!found) {
+
+                    IPCRENDERER.send("if-qr-scan-error", {
+                        "ERRCOD": "0015"
+                    }); // "카메라가 없습니다."
+
+                    CURRWIN.close();
+                    return;
+                }
+
+                var oSelect = document.getElementById("cameraSelect");
+                if (!oSelect) {
+                    return;
+                }
+
+                // ComboBox List가 있으면 초기화
+                while (oSelect.firstChild) {
+                    oSelect.removeChild(oSelect.firstChild);
+                }
+
+                var iDeviceLen = aDeviceInfos.length;
+
+                // 카메라 정보만 수집한다.
+                for (var i = 0; i < iDeviceLen; i++) {
+
+                    var oDevice = aDeviceInfos[i];
+
+                    if (oDevice.kind != "videoinput") {
+                        continue;
+                    }
+
+                    aCAMERA.push(oDevice);
+
+                }
+
+                // 수집된 카메라 정보로 Combobox를 구성한다.
+                var iCameraCnt = aCAMERA.length;
+
+                // 카메라 갯수가 2개 이상일 경우 Combobox를 보여준다.
+                if (iCameraCnt >= 2) {
+                    oSelect.classList.remove("u4aCdvDisplayHidden");
+                }
+
+                for (var i = 0; i < iCameraCnt; i++) {
+
+                    var oCamera = aCAMERA[i],
+                        oOption = document.createElement("option");
+
+                    oOption.classList.add("u4aCdvCamera_option");
+
+                    oOption.setAttribute("value", oCamera.deviceId);
+                    oOption.innerHTML = oCamera.label;
+
+                    oSelect.appendChild(oOption);
+
+                }
+
+                // 이전에 선택한 카메라 정보 존재 유무 체크
+                oAPP.onCheckBeforeSavedCameraInfo();
+
+            }; // end of oAPP.getQrCameraDevicesInfo
+
+            /************************************************************************
+             * Qr / barcode 스캔 시작
+             * **********************************************************************/
+            oAPP.onQrScanStart = function () {
+
+                COMMON.setLoadingPageBusy('X');
+
+                var isScanning = html5QrCode.isScanning;
+                if (isScanning) {
+                    html5QrCode.stop();
+                    html5QrCode.clear();
+                }
+
+                // 이전에 선택했던 카메라
+                var sBeforeCameraId = localStorage.getItem("cameraID"),
+                    oCameraSelect = document.getElementById("cameraSelect"),
+                    sVideoSource;
+
+                if (oCameraSelect) {
+                    sVideoSource = oCameraSelect.value;
+
+                    if (sBeforeCameraId != sVideoSource) {
+                        localStorage.setItem("cameraID", sVideoSource);
+
+                    }
+                }
+
+                const
+                    oVideoInfo = {
+                        deviceId: {
+                            exact: sVideoSource ? sVideoSource : undefined
+                        }
+                    },
+                    oQrConfig = {
+                        fps: 10,
+                        qrbox: {
+                            width: 800,
+                            height: 500
+                        }
+                    };
+
+                html5QrCode.start(
+                        oVideoInfo,
+                        oQrConfig, // QR config
+                        oAPP.onQrScanSuccess,
+                        oAPP.onQrScanConsoleError
+                    ).then(function (e) {
+                        COMMON.setLoadingPageBusy('');
+                    })
+                    .catch(oAPP.onQrScanError);
+
+            }; // end of oAPP.onQrScanStart
+
+            /************************************************************************
+             * 스캔 성공시 결과를 리턴한다.
+             * **********************************************************************/
+            oAPP.onQrScanSuccess = function (decodedText, decodedResult) {
+
+                var sResultQrCode = decodedText,
+                    sFormatName = decodedResult.result.format.formatName;
+
+                var oScanOpt = oAPP.QrScanOpt,
+                    oRetVal = {
+                        "Result": sResultQrCode,
+                        "Format": sFormatName,
+                        "Cancelled": false,
+                        "row_index": oScanOpt.row_index
+                    };
+
+                IPCRENDERER.send("if-qr-scan-result", {
+                    RESULT: oRetVal
+                });
+
+                CURRWIN.close();
+
+            }; // end of oAPP.onQrScanSuccess
+
+            /************************************************************************
+             * 스캔 Reading 중에 로그처럼 Error 이벤트가 발생된다.
+             * **********************************************************************/
+            oAPP.onQrScanConsoleError = function (err) {
+
+                // console.log(err);
+
+            }; // end of oAPP.onQrScanConsoleError
+
+            /************************************************************************
+             * html5QrCode에서 스캔 Reading 실행 시, 오류가 발생될 경우.
+             * **********************************************************************/
+            oAPP.onQrScanError = function (err) {
+
+                COMMON.setLoadingPageBusy('');
+
+                IPCRENDERER.send("if-qr-scan-error", {
+                    "ERRCOD": "0017"
+                }); // "Qr Barcode Read Fail!"
+
+                CURRWIN.close();
+
+            }; // end of oAPP.onQrScanError            
+
+            /************************************************************************
+             * 이전에 선택한 카메라 정보 존재 유무 체크
+             * **********************************************************************/
+            oAPP.onCheckBeforeSavedCameraInfo = function () {
+
+                // 이전에 선택한 카메라 정보가 없으면 빠져나간다.
+                var sSavedLocStor = localStorage.getItem("cameraID");
+                if (!sSavedLocStor) {
+                    return;
+                }
+
+                var oCameraSelect = document.getElementById("cameraSelect");
+                if (!oCameraSelect) {
+                    return;
+                }
+                var aOptions = oCameraSelect.options,
+                    iOptionLength = aOptions.length,
+                    aCameraOptions = [];
+
+                // HTMLOptionsCollect -> Array 변환
+                for (var i = 0; i < iOptionLength; i++) {
+                    aCameraOptions.push(aOptions[i]);
+                }
+
+                // Combobox 값 중, 이전에 선택한 카메라 정보가 있는지 확인한다.
+                var sFoundValue = aCameraOptions.find(element => element.value === sSavedLocStor);
+
+                if (!sFoundValue) {
+                    return;
+                }
+
+                oCameraSelect.value = sSavedLocStor;
+
+            }; // end of oAPP.onCheckBeforeSavedCameraInfo
+
+            /************************************************************************
+             * 카메라 정보 읽기 실패 시.
+             * **********************************************************************/
+            oAPP.onQrCameraErrorHandle = function (error) {
+
+                IPCRENDERER.send("if-qr-scan-error", {
+                    "ERRCOD": "0018"
+                }); //"카메라 정보 읽기 실패!"
+
+                CURRWIN.close();
+
+            }; // end of oAPP.onQrCameraErrorHandle
+
+            /************************************************************************
+             * 윈도우 창 닫는 버튼 이벤트
+             * **********************************************************************/
+            oAPP.onQrScanWinCloseBtn = function () {
+
+                var oScanOpt = oAPP.QrScanOpt,
+                    oRetVal = {
+                        "Cancelled": true,
+                        "row_index": oScanOpt.row_index
+                    };
+
+                IPCRENDERER.send("if-qr-scan-result", {
+                    RESULT: oRetVal
+                });
+
+                CURRWIN.close();
+
+            }; // end of oAPP.onQrScanWinCloseBtn
+
+            /************************************************************************
+             * [IPC Event] Qr scan 시 적용할 option 정보를 받는다.
+             * **********************************************************************/
+            oAPP.onIpcRenderer_if_qr_scan_opt = function (e, res) {
+
+                oAPP.QrScanOpt = res;
+
+                oAPP.onStart();
+
+            }; // end of oAPP.onIpcRenderer_if_qr_scan_opt
+
+            IPCRENDERER.on("if-qr-scan-opt", oAPP.onIpcRenderer_if_qr_scan_opt);
+
+            return oAPP;
+            
+        })();
+    </script>
+
+</body>
+
+</html>
