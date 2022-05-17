@@ -1,2 +1,4 @@
 # U4A_APP_DESK
 U4A DESKTOP APPLICATION
+
+데스크탑 (WINDOWS) 전용 Application
