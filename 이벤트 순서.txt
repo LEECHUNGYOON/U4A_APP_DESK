@@ -1,0 +1,2 @@
+1. onNetWorkOnline
+2. onDeviceReady

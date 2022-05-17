@@ -1,0 +1,21 @@
+{
+    "0001" : "Scanning failed!",
+    "0002" : "Permission setting error!",
+    "0003" : "NFC permission is not allowed. Moves to the permission setting.",
+    "0004" : "NFC is not supported!",
+    "0005" : "Download Error!",
+    "0006" : "NFC Tag Listener Event registration failed!",
+    "0007" : "NFC Reading Event registration failed!",
+    "0008" : "File import failed!",
+    "0009" : "File system Execution failed!",
+    "0010" : "NFC Write failed!",
+    "0011" : "Ajax failed!",
+    "0012" : "File Download failed!",
+    "0013" : "File Open failed!",
+    "0014" : "File Write failed!",
+    "0015" : "The camera device does not exist.",
+    "0016" : "Media is not supported!",
+    "0017" : "Qr Barcode Reading Fail!",
+    "0018" : "Failed to read camera information!",
+    "0019" : "Do you want to Create Shortcut?"
+}

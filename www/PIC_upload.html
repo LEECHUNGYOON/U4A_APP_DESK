@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <link rel="stylesheet" href="css/index.css">
+    <title>Take a Picture</title>
+
+</head>
+
+<body>
+
+    <video id="vd" class="u4aCdvVideo"></video>
+    <audio id="u4aCdvAudio" style="visibility: hidden;">
+    </audio>
+
+    <div class="u4aCdvCameraSelect_wrap">
+        <select id="cameraSelect" name="camera_list" class="u4aCdvCamera_selOri u4aCdvDisplayHidden"
+            onchange="oAPP.onCameraStart();">
+        </select>
+    </div>
+
+    <div id="u4aCdvCamera_wrap">
+        <div class="u4aCdvCamera_btm">
+            <div class="u4aCdvCamera_click u4aCdvCamera_bt">
+                <button type="button" class="u4aCdvCamera_clickBt" onclick="oAPP.onCameraCapture();">
+                    <img src="svg/Group 15.svg" alt="button">
+                </button>
+            </div>
+            <div id="u4aCdvCamera_switchBtn" class="u4aCdvCamera_switch u4aCdvCamera_bt u4aCdvCamera_btnHidden">
+                <button type="button" class="u4aCdvCamera_switchBt" onclick="oAPP.onCameraSwitch();">
+                    <img src="svg/Group 2.svg" alt="button">
+                    <img src="svg/Group 8.svg" alt="button">
+                </button>
+            </div>
+            <div class="u4aCdvCamera_close u4aCdvCamera_bt">
+                <button type="button" class="u4aCdvCamera_closeBt" onclick="oAPP.onCameraCloseBtn();">
+                    <img src="svg/Union (1).svg" alt="button">
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Page Loading Start -->
+    <div id="u4a_main_load" class="u4a_loaders">
+        <span class="u4a_loader u4a_loader-bars"> <span></span> </span> Loading...
+    </div>
+    <!-- Page Loading End -->
+
+    <script src="cordova.js"></script>
+    <!-- <script src="js/common.js"></script> -->
+    <script>
+        var oAPP = (function () {
+            "use strict";
+
+            /************************************************************************
+             * Global Variables
+             * **********************************************************************/
+            var oAPP = {};
+
+            const
+                PATH = require('path'),
+                COMMON = require(PATH.join(__dirname, "\\js\\common.js"));
+
+            oAPP.CameraPicOpt = {};
+
+            const
+                REMOTE = require('electron').remote,
+                IPCRENDERER = require('electron').ipcRenderer,
+                CURRWIN = REMOTE.getCurrentWindow(),
+                FS = REMOTE.require('fs'),
+                APP = REMOTE.app,
+                SHELL = REMOTE.shell,
+                aCAMERA = [];
+
+            var localstream;
+
+            oAPP.onStart = function () {
+
+                navigator.getUserMedia = navigator.getUserMedia ||
+                    navigator.webkitGetUserMedia ||
+                    navigator.mozGetUserMedia;
+
+                if (!navigator.getUserMedia) {
+
+                    IPCRENDERER.send("if-camera-error", {
+                        "ERRCOD": "0016"
+                    }); // "미디어를 지원하지 않습니다."
+
+                    CURRWIN.close();
+
+                    return;
+                }
+
+                // 비디오 정보를 구하고, 카메라를 실행
+                navigator.mediaDevices.enumerateDevices()
+                    .then(oAPP.getCameraDevicesInfo)
+                    .then(oAPP.onCameraStart)
+                    .catch(oAPP.onCameraErrorHandle);
+
+            }; // end of oAPP.onStart
+
+            /************************************************************************
+             * 현재 디바이스에 카메라 정보를 구한다.
+             * **********************************************************************/
+            oAPP.getCameraDevicesInfo = function (aDeviceInfos) {
+
+                // Media Device 정보가 담긴 Object의 데이터 타입 체크
+                if (aDeviceInfos instanceof Array == false) {
+                    return;
+                }
+
+                // Media 정보 중, 카메라 디바이스가 없을 경우 실행하지 않는다.
+                var found = aDeviceInfos.find(element => element.kind === "videoinput");
+                if (!found) {
+
+                    // throw new Error("카메라가 없습니다.");                    
+                    IPCRENDERER.send("if-camera-error", {
+                        "ERRCOD": "0015"
+                    }); //"카메라가 없습니다."
+
+                    CURRWIN.close();
+                    return;
+                }
+
+                var oSelect = document.getElementById("cameraSelect");
+                if (!oSelect) {
+                    return;
+                }
+
+                // ComboBox List가 있으면 초기화
+                while (oSelect.firstChild) {
+                    oSelect.removeChild(oSelect.firstChild);
+                }
+
+                var iDeviceLen = aDeviceInfos.length;
+
+                // 카메라 정보만 수집한다.
+                for (var i = 0; i < iDeviceLen; i++) {
+
+                    var oDevice = aDeviceInfos[i];
+
+                    if (oDevice.kind != "videoinput") {
+                        continue;
+                    }
+
+                    aCAMERA.push(oDevice);
+
+                }
+
+                // 수집된 카메라 정보로 Combobox를 구성한다.
+                var iCameraCnt = aCAMERA.length;
+
+                // 카메라 갯수가 2개 이상일 경우 Combobox를 보여준다.
+                if (iCameraCnt >= 2) {
+                    oSelect.classList.remove("u4aCdvDisplayHidden");
+                }
+
+                for (var i = 0; i < iCameraCnt; i++) {
+
+                    var oCamera = aCAMERA[i];
+
+                    var oOption = document.createElement("option");
+                    oOption.setAttribute("value", oCamera.deviceId);
+                    oOption.classList.add('u4aCdvCamera_option');
+                    oOption.innerHTML = oCamera.label;
+
+                    oSelect.appendChild(oOption);
+
+                }
+
+                // 이전에 선택한 카메라 정보 존재 유무 체크
+                oAPP.onCheckBeforeSavedCameraInfo();
+
+            }; // end of oAPP.getCameraDevicesInfo
+
+            /************************************************************************
+             * 이전에 선택한 카메라 정보 존재 유무 체크
+             * **********************************************************************/
+            oAPP.onCheckBeforeSavedCameraInfo = function () {
+
+                // 이전에 선택한 카메라 정보가 없으면 빠져나간다.
+                var sSavedLocStor = localStorage.getItem("cameraID");
+                if (!sSavedLocStor) {
+                    return;
+                }
+
+                var oCameraSelect = document.getElementById("cameraSelect"),
+                    aOptions = oCameraSelect.options,
+                    iOptionLength = aOptions.length,
+                    aCameraOptions = [];
+
+                // HTMLOptionsCollect -> Array 변환
+                for (var i = 0; i < iOptionLength; i++) {
+                    aCameraOptions.push(aOptions[i]);
+                }
+
+                // Combobox 값 중, 이전에 선택한 카메라 정보가 있는지 확인한다.
+                var sFoundValue = aCameraOptions.find(element => element.value === sSavedLocStor);
+
+                if (!sFoundValue) {
+                    return;
+                }
+
+                oCameraSelect.value = sSavedLocStor;
+
+            }; // end of oAPP.onCheckBeforeSavedCameraInfo
+
+            /************************************************************************
+             * 카메라 실행
+             * **********************************************************************/
+            oAPP.onCameraStart = function () {
+
+                COMMON.setLoadingPageBusy('X');
+
+                if (window.stream) {
+                    window.stream.getTracks().forEach(track => {
+                        track.stop();
+                    });
+                }
+
+                // 이전에 선택한 카메라 정보를 찾는다.
+                var sBeforeCameraId = localStorage.getItem("cameraID"),
+                    oCameraSelect = document.getElementById("cameraSelect"),
+                    sVideoSource;
+
+                if (oCameraSelect) {
+                    sVideoSource = oCameraSelect.value;
+
+                    if (sBeforeCameraId != sVideoSource) {
+                        localStorage.setItem("cameraID", sVideoSource);
+
+                    }
+                }
+
+                var videoInfo = {
+                    deviceId: {
+                        exact: sVideoSource ? sVideoSource : undefined
+                    }
+                };
+
+                var oOptions = {
+                    audio: false,
+                    video: videoInfo
+                };
+
+                navigator.mediaDevices.getUserMedia(oOptions)
+                    .then(oAPP.onCameraStartSuccess)
+                    .catch(oAPP.onCameraErrorHandle);
+
+            }; // end of oAPP.onCameraStart
+
+            /************************************************************************
+             * 카메라 오픈 성공 시
+             * **********************************************************************/
+            oAPP.onCameraStartSuccess = function (STREAM) {
+
+                var oVideo = document.getElementById('vd');
+                if (!oVideo) {
+                    return;
+                }
+
+                // camera에서 전달하는 stream 데이터를 video 태그에 넣는다.
+                oVideo.srcObject = STREAM;
+
+                window.stream = STREAM;
+
+                // Video Object 가 Load 된 경우 play 시킨다.                
+                oVideo.onloadedmetadata = oAPP.onVideoLoadedMetadata;
+
+            }; // end of oAPP.onCameraStartSuccess
+
+            /************************************************************************
+             * 카메라 정보 읽기 실패 시.
+             * **********************************************************************/
+            oAPP.onCameraErrorHandle = function (error) {
+
+                IPCRENDERER.send("if-camera-error", {
+                    "ERRCOD": "0018"
+                }); //"카메라 정보 읽기 실패!"
+
+                CURRWIN.close();
+
+            }; // end of oAPP.onCameraErrorHandle
+
+            /************************************************************************
+             * Video 실행 
+             * **********************************************************************/
+            oAPP.onVideoLoadedMetadata = function () {
+
+                this.play();
+
+                COMMON.setLoadingPageBusy('');
+
+            }; // end of oAPP.onVideoLoadedMetadata
+
+            /************************************************************************
+             * Camera Capture
+             * **********************************************************************/
+            oAPP.onCameraCapture = function () {
+
+                // 카메라 셔텨음
+                oAPP.onPlayCameraShutterSound();
+
+                const
+                    oVideo = document.getElementById("vd"),
+                    oCanvas = document.createElement("canvas");
+
+                oCanvas.width = oVideo.clientWidth;
+                oCanvas.height = oVideo.clientHeight;
+
+                oCanvas.getContext('2d').drawImage(oVideo, 0, 0, oCanvas.width, oCanvas.height);
+
+                /* Canvas 좌우 반전 시키는 로직 */
+                // var oContext = oCanvas.getContext('2d');
+                // oContext.save();
+                // oContext.scale(-1, 1);
+                // oContext.translate((oCanvas.width * -1), 0);
+                // oContext.drawImage(oVideo, 0, 0, oCanvas.width, oCanvas.height);
+                // oContext.restore();
+
+                var sImgBase64 = oCanvas.toDataURL();
+
+                // 사진 캡쳐 미리보기 html path
+                var sPrevPath = APP.getAppPath() + "\\PIC_preview.html";
+
+                var oCurrWin = REMOTE.getCurrentWindow(),
+                    oBrowserOption = {
+                        url: sPrevPath,
+                        fullscreen: true,
+                        autoHideMenuBar: true,
+                        resizable: true,
+                        movable: true,
+                        closable: true,
+                        modal: true,
+                        parent: oCurrWin,
+                        webPreferences: {
+                            nodeIntegration: true,
+                            enableRemoteModule: true,
+                        }
+                    };
+
+                // 브라우저 오픈
+                var oBrowserWindow = new REMOTE.BrowserWindow(oBrowserOption);
+                oBrowserWindow.loadURL(sPrevPath);
+
+                // oBrowserWindow.webContents.openDevTools();
+
+                // 브라우저가 오픈이 다 되면 타는 이벤트
+                oBrowserWindow.webContents.on('did-finish-load', function () {
+                    oBrowserWindow.webContents.send('if-camera-pic-img', sImgBase64);
+                });
+
+                // 브라우저를 닫을때 타는 이벤트
+                oBrowserWindow.on('closed', () => {
+                    oBrowserWindow = null;
+                });
+
+            }; // end of oAPP.onCameraCapture
+
+            /************************************************************************
+             * 카메라 창 닫기
+             * **********************************************************************/
+            oAPP.onCameraCloseBtn = function () {
+
+                CURRWIN.close();
+
+            }; // end of oAPP.onCameraWinCloseBtn
+
+            /************************************************************************
+             * 카메라 셔텨음 실행
+             * **********************************************************************/
+            oAPP.onPlayCameraShutterSound = function () {
+
+                var oAudio = document.getElementById("u4aCdvAudio");
+                if (!oAudio) {
+                    return;
+                }
+
+                var sSoundPath = APP.getAppPath() + "\\sound\\camera_shutter.wav";
+
+                // 실행 중이면 리턴.
+                if (!oAudio.paused) {
+                    return;
+                }
+
+                oAudio.src = "";
+                oAudio.src = sSoundPath;
+                oAudio.play();
+
+            }; // end of oAPP.onPlayCameraShutterSound
+
+            /************************************************************************
+             * 카메라 실행 옵션 정보
+             * **********************************************************************/
+            oAPP.onIpcRenderer_if_camera_pic_opt = function (e, res) {
+
+                oAPP.CameraPicOpt = res;
+
+                oAPP.onStart();
+
+            }; // end of oAPP.onIpcRenderer_if_camera_pic_opt
+
+            IPCRENDERER.on("if-camera-pic-opt", oAPP.onIpcRenderer_if_camera_pic_opt);
+
+            oAPP.onBeforeunload = function () {
+
+                // 이벤트 해제
+                IPCRENDERER.removeListener("if-camera-pic-opt", oAPP.onIpcRenderer_if_camera_pic_opt);
+
+            };
+
+            return oAPP;
+            
+        })();
+
+        window.addEventListener("beforeunload", oAPP.onBeforeunload);
+    </script>
+
+</body>
+
+</html>
